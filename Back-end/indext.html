@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ทะเบียนนักเรียนฮอกวอตส์</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* กำหนดพื้นหลังและสีธีม Harry Potter */
+        body {
+            background-image: url('https://images.unsplash.com/photo-1585521549926-bee00b13aae3?q=80&w=1170');
+            background-size: cover;
+            background-position: center;
+            font-family: 'Palatino Linotype', serif;
+        }
+
+        .hogwarts-card {
+            background-color: rgba(255, 247, 230, 0.9);
+            border: 2px solid #8c7663;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .gryffindor-btn {
+            background-color: #740001;
+            border: 2px solid #d3a625;
+        }
+
+        .gryffindor-btn:hover {
+            background-color: #ae0001;
+        }
+
+        .hogwarts-table th {
+            background-color: #2a623d;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen">
+
+    <!-- กล่องหลักที่เก็บทุกอย่าง -->
+    <div class="hogwarts-card p-6 rounded-lg w-96">
+        <h2 class="text-lg font-bold mb-4 text-center">🧙‍♂️ ทะเบียนนักเรียนฮอกวอตส์ 🧙‍♀️</h2>
+
+        <!-- ช่องกรอก URL API - บอกว่าระบบจะติดต่อกับเซิร์ฟเวอร์ที่ไหน -->
+        <label class="block text-sm font-medium text-gray-700">คำสั่งเวทมนตร์ (API Path):</label>
+        <input id="apiPath" type="text" value="http://127.0.0.1:5000/hogwarts" class="w-full p-2 border rounded mb-4"
+            title="นี่คือที่อยู่ของเซิร์ฟเวอร์ที่เราจะส่งข้อมูลไป">
+
+        <!-- เลือกว่าจะทำอะไรกับข้อมูล - สร้าง/เพิ่ม/แก้ไข/ลบ/ค้นหา -->
+        <label class="block text-sm font-medium text-gray-700">คาถาที่ต้องการใช้:</label>
+        <select id="actionSelect" class="w-full p-2 border rounded mb-4" onchange="updateForm()" title="เลือกคาถาที่ต้องการใช้">
+            <option value="create">✨ Incantatum (สร้างตาราง)</option>
+            <option value="insert">📝 Inscribio (เพิ่มข้อมูล)</option>
+            <option value="update">🔄 Transformo (แก้ไขข้อมูล)</option>
+            <option value="delete">❌ Deletrius (ลบข้อมูล)</option>
+            <option value="select">🔍 Revelio (ค้นหาข้อมูล)</option>
+        </select>
+
+        <!-- พื้นที่ว่างสำหรับฟอร์มที่จะเปลี่ยนไปตามการเลือกคาถา -->
+        <div id="formContainer">
+            <div id="extraFields"></div>
+        </div>
+
+        <!-- ปุ่มส่งคำสั่ง - ใช้ type="button" เพื่อป้องกันการรีโหลดหน้าเว็บ -->
+        <button type="button" id="submitButton" class="w-full gryffindor-btn text-white py-2 rounded hover:bg-blue-600">
+            คาสทาร์! (ส่งคำสั่ง)
+        </button>
+
+        <!-- ตารางแสดงข้อมูล - จะซ่อนอยู่จนกว่าจะใช้คาถา Revelio -->
+        <div id="tableContainer" class="hidden mt-4">
+            <h3 class="text-lg font-semibold mb-2">รายชื่อนักเรียนฮอกวอตส์</h3>
+            <table class="w-full border-collapse border border-gray-300 hogwarts-table">
+                <thead>
+                    <tr>
+                        <th class="border border-gray-300 px-2 py-1">รหัส</th>
+                        <th class="border border-gray-300 px-2 py-1">ชื่อ</th>
+                        <th class="border border-gray-300 px-2 py-1">บ้าน</th>
+                        <th class="border border-gray-300 px-2 py-1">ปี</th>
+                        <th class="border border-gray-300 px-2 py-1">ไม้กายสิทธิ์</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTable"></tbody>
+            </table>
+        </div>
+
+        <!-- กล่องแสดงผลลัพธ์จากเซิร์ฟเวอร์ -->
+        <pre id="resultBox" class="mt-4 p-2 bg-gray-200 rounded text-sm"></pre>
+    </div>
+
+    <script>
+        // เมื่อเว็บโหลดเสร็จ ให้เตรียมฟอร์มและปุ่มกด
+        document.addEventListener('DOMContentLoaded', function () {
+            // ตั้งค่าฟอร์มครั้งแรกตามค่าเริ่มต้น
+            updateForm();
+
+            // เพิ่มการทำงานให้ปุ่ม Submit เมื่อคลิกจะเรียกฟังก์ชัน sendRequest
+            document.getElementById('submitButton').addEventListener('click', sendRequest);
+        });
+
+        // ฟังก์ชันนี้จะเปลี่ยนฟอร์มให้เหมาะกับคาถาที่เลือก
+        function updateForm() {
+            let action = document.getElementById("actionSelect").value;  // ดึงค่าคาถาที่เลือก
+            let extraFields = document.getElementById("extraFields");   // พื้นที่สำหรับแสดงฟอร์ม
+
+            // สร้างฟอร์มที่แตกต่างกันตามคาถาที่เลือก
+            if (action === "delete") {
+                // สำหรับลบข้อมูล ต้องการแค่รหัสนักเรียน
+                extraFields.innerHTML = `
+                    <label class="block text-sm font-medium text-gray-700">รหัสประจำตัวนักเรียน:</label>
+                    <input id="userIdInput" type="number" placeholder="ใส่รหัสนักเรียนที่ต้องการลบ" class="w-full p-2 border rounded mb-4">
+                `;
+            } else if (action === "insert") {
+                // สำหรับเพิ่มข้อมูล ต้องการชื่อ บ้าน ปี และไม้กายสิทธิ์
+                extraFields.innerHTML = `
+                    <label class="block text-sm font-medium text-gray-700">ชื่อนักเรียน:</label>
+                    <input id="nameInput" type="text" placeholder="ใส่ชื่อนักเรียน" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">บ้าน:</label>
+                    <input id="houseInput" type="text" placeholder="ใส่บ้าน (เช่น Gryffindor)" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">ปีการศึกษา:</label>
+                    <input id="yearInput" type="number" placeholder="ใส่ปีการศึกษา (1-7)" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">ไม้กายสิทธิ์:</label>
+                    <input id="wandInput" type="text" placeholder="ใส่ไม้กายสิทธิ์ (เช่น Holly, Phoenix Feather)" class="w-full p-2 border rounded mb-4">
+                `;
+            } else if (action === "update") {
+                // สำหรับแก้ไขข้อมูล ต้องการรหัส ชื่อ บ้าน ปี และไม้กายสิทธิ์
+                extraFields.innerHTML = `
+                    <label class="block text-sm font-medium text-gray-700">รหัสประจำตัวนักเรียน:</label>
+                    <input id="userIdInput" type="number" placeholder="ใส่รหัสนักเรียนที่ต้องการแก้ไข" class="w-full p-2 border rounded mb-4">
+                    
+                    <label class="block text-sm font-medium text-gray-700">ชื่อใหม่:</label>
+                    <input id="nameInput" type="text" placeholder="ใส่ชื่อใหม่" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">บ้านใหม่:</label>
+                    <input id="houseInput" type="text" placeholder="ใส่บ้านใหม่ (เช่น Gryffindor)" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">ปีการศึกษาใหม่:</label>
+                    <input id="yearInput" type="number" placeholder="ใส่ปีการศึกษาใหม่ (1-7)" class="w-full p-2 border rounded mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700">ไม้กายสิทธิ์ใหม่:</label>
+                    <input id="wandInput" type="text" placeholder="ใส่ไม้กายสิทธิ์ใหม่ (เช่น Holly, Phoenix Feather)" class="w-full p-2 border rounded mb-4">
+                `;
+            } else {
+                // สำหรับคาถาอื่นๆ ไม่ต้องการฟอร์มเพิ่มเติม
+                extraFields.innerHTML = "";
+            }
+        }
+
+        // ฟังก์ชันนี้ทำหน้าที่ส่งข้อมูลไปยังเซิร์ฟเวอร์
+        function sendRequest(event) {
+            // ป้องกันหน้าเว็บรีโหลด (ถ้ามี event เข้ามา)
+            if (event) {
+                event.preventDefault();
+            }
+
+            // ดึงข้อมูลที่จำเป็นจากหน้าเว็บ
+            let apiPath = document.getElementById("apiPath").value;  // URL ของ API
+            let action = document.getElementById("actionSelect").value;  // คาถาที่เลือก
+            let resultBox = document.getElementById("resultBox");  // กล่องแสดงผล
+            let tableContainer = document.getElementById("tableContainer");  // กล่องตาราง
+            let dataTable = document.getElementById("dataTable");  // ตารางแสดงข้อมูล
+
+            let data = {};  // เตรียมข้อมูลสำหรับส่งไปเซิร์ฟเวอร์
+            let method = "";  // HTTP method ที่จะใช้
+            console.log("คำสั่งเวทมนตร์:", apiPath);
+            console.log("คาถาที่เลือก:", action);
+
+            // กำหนดวิธีการส่งข้อมูลตามคาถาที่เลือก
+            if (action === "create") {
+                // สร้างตาราง
+                apiPath += "/create";  // เพิ่ม /create ต่อท้าย URL
+                method = "POST";  // ใช้วิธี POST
+            } else if (action === "insert") {
+                // เพิ่มข้อมูล
+                method = "POST";  // ใช้วิธี POST
+                data = {
+                    name: document.getElementById("nameInput").value,  // ดึงชื่อจากฟอร์ม
+                    house: document.getElementById("houseInput").value,  // ดึงบ้านจากฟอร์ม
+                    year: parseInt(document.getElementById("yearInput").value),  // ดึงปีการศึกษาจากฟอร์ม แปลงเป็นตัวเลข
+                    wand: document.getElementById("wandInput").value  // ดึงไม้กายสิทธิ์จากฟอร์ม
+                };
+            } else if (action === "update") {
+                // แก้ไขข้อมูล
+                method = "PUT";  // ใช้วิธี PUT
+                apiPath += `/${document.getElementById("userIdInput").value}`;  // เพิ่มรหัสนักเรียนต่อท้าย URL
+                data = {
+                    name: document.getElementById("nameInput").value,  // ชื่อใหม่
+                    house: document.getElementById("houseInput").value,  // บ้านใหม่
+                    year: parseInt(document.getElementById("yearInput").value),  // ปีการศึกษาใหม่
+                    wand: document.getElementById("wandInput").value  // ไม้กายสิทธิ์ใหม่
+                };
+            } else if (action === "delete") {
+                // ลบข้อมูล
+                method = "DELETE";  // ใช้วิธี DELETE
+                apiPath += `/${document.getElementById("userIdInput").value}`;  // เพิ่มรหัสนักเรียนต่อท้าย URL
+            } else if (action === "select") {
+                // ค้นหาข้อมูล
+                method = "GET";  // ใช้วิธี GET
+                apiPath += "";  // เพิ่ม /students ต่อท้าย URL
+            }
+
+            // ส่งข้อมูลไปที่เซิร์ฟเวอร์ด้วย fetch API
+            fetch(apiPath, {
+                method: method,
+                headers: { "Content-Type": "application/json" },
+                body: action === "delete" || action === "select" ? null : JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    resultBox.textContent = JSON.stringify(data, null, 2);
+
+                    if (action === "select" && Array.isArray(data)) {
+                        tableContainer.classList.remove("hidden");
+                        dataTable.innerHTML = data.map(student => `
+                        <tr>
+                            <td class="border border-gray-300 px-2 py-1">${student.id}</td>
+                            <td class="border border-gray-300 px-2 py-1">${student.name}</td>
+                            <td class="border border-gray-300 px-2 py-1">${student.house}</td>
+                            <td class="border border-gray-300 px-2 py-1">${student.year}</td>
+                            <td class="border border-gray-300 px-2 py-1">${student.wand}</td>
+                        </tr>
+                    `).join("");
+                    } else {
+                        tableContainer.classList.add("hidden");
+                    }
+                    // เพิ่มการหน่วงเวลา 2 วินาทีก่อน refetch หรืออัปเดตหน้า
+                    setTimeout(() => {
+                        if (action === "insert" || action === "update") {
+                            alert("ข้อมูลถูกบันทึกเรียบร้อยแล้ว!"); // แสดงข้อความแจ้งเตือน
+                            location.reload(); // รีโหลดหน้าเว็บ
+                        }
+                    }, 2000); // หน่วงเวลา 2 วินาที
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    resultBox.textContent = "Error: " + error;
+                });
+
+            // ป้องกันการ submit ฟอร์มอีกครั้งเพื่อความแน่นอน
+            return false;
+        }
+    </script>
+
+</body>
+
+</html>
